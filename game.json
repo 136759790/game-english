@@ -1,0 +1,16 @@
+{
+  "deviceOrientation": "portrait",
+  "networkTimeout": {
+    "request": 10000,
+    "connectSocket": 10000,
+    "uploadFile": 10000,
+    "downloadFile": 10000
+  },
+  "openDataContext": "openDataContext",
+  "window": {
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#4f8df7",
+    "navigationBarTitleText": "英语单词消消乐",
+    "navigationBarTextStyle": "white"
+  }
+}
