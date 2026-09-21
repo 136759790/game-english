@@ -1,7 +1,8 @@
 const CATEGORY_META = require('./data/categoryMeta');
 const WORD_BANK = require('./data/wordBank');
 const { getCurrentUserName } = require('./services/cloudService');
-const { createExplosion } = require('./views/components');
+const { createExplosion, createFloatText } = require('./views/components');
+const soundManager = require('./services/audio'); // 引入音频服务
 
 function shuffle(arr) {
   const copy = [...arr];
@@ -36,7 +37,6 @@ function buildAllLevels() {
 function buildBoardTiles(level) {
   const tiles = [];
   level.words.forEach((word) => {
-    // 增加 matched 状态字段
     tiles.push({ id: word.id, text: word.cn, kind: 'cn', matched: false });
     tiles.push({ id: word.id, text: word.en, kind: 'en', matched: false });
   });
@@ -47,9 +47,10 @@ const state = {
   levelIndex: 0,
   selected: [],
   board: [],
-  shakeIndices: [],     // 正在晃动的卡片索引
-  shakeStartTime: 0,    // 晃动开始时间
-  particles: [],        // 粒子特效集合
+  shakeIndices: [],
+  shakeStartTime: 0,
+  particles: [],
+  floatTexts: [],
   locked: false,
   canvas: null,
   ctx: null,
@@ -67,18 +68,56 @@ const state = {
     next: null,
     hint: null,
     refresh: null,
+    exit: null,
+    mute: null,
+    settings: null,
+    settingsMute: null,
+    settingsExit: null,
   },
+  settingsOpen: false,
+  muted: soundManager.isMuted(),
   bgImage: null,
   bgImageLoaded: false,
+
+  // 限时狂飙模式相关状态
+  score: 0,
+  timeLeft: 30,             // 初始倒计时 30s
+  maxTime: 30,              // 基础满时间
+  timerInterval: null,      // 定时器句柄
+  comboCount: 0,            // 当前连击数
+  lastMatchTime: 0,         // 上一次配对成功的时间戳
+  isFever: false,           // 是否处于 Fever 狂暴状态
+  isGameOver: false,        // 是否超时失败
+
   allLevels: buildAllLevels(),
   CATEGORY_META,
 };
 
-async function initUserName() {
-  const { loginToCloudUser, getCurrentUserName } = require('./services/cloudService');
-  // 静默登录：先尝试从缓存读取，再尝试真实登录
-  await loginToCloudUser();
+function initUserName() {
   state.userName = getCurrentUserName();
+}
+
+function startTimer() {
+  if (state.timerInterval) clearInterval(state.timerInterval);
+  state.timerInterval = setInterval(() => {
+    if (state.screen === 'game' && !state.isGameOver) {
+      state.timeLeft -= 1;
+      
+      // 判断 Combo 是否过期（超过 3.5 秒未连击清零）
+      if (Date.now() - state.lastMatchTime > 3500) {
+        state.comboCount = 0;
+        state.isFever = false;
+      }
+
+      if (state.timeLeft <= 0) {
+        state.timeLeft = 0;
+        state.isGameOver = true;
+        soundManager.stopBGM(); // 超时停止 BGM
+        soundManager.playFail(); // 播放失败音效
+        clearInterval(state.timerInterval);
+      }
+    }
+  }, 1000);
 }
 
 function resetCurrentLevel() {
@@ -87,9 +126,23 @@ function resetCurrentLevel() {
   state.selected = [];
   state.shakeIndices = [];
   state.particles = [];
+  state.floatTexts = [];
   state.locked = false;
   state.tilePositions = [];
+
+  // 重置模式数值
+  state.score = 0;
+  state.timeLeft = 30;
+  state.comboCount = 0;
+  state.isFever = false;
+  state.isGameOver = false;
+
+  state.muted = soundManager.isMuted();
   setMessage('请选择同一单词的中英两块', 'success');
+  if (!state.muted) {
+    soundManager.startBGM();
+  }
+  startTimer();
 }
 
 function setMessage(text, type = 'success') {
@@ -104,7 +157,7 @@ function setMessage(text, type = 'success') {
 }
 
 function handleTileClick(index) {
-  // 处于晃动冻结期，或点击已消除/已选中的卡片，直接屏蔽
+  if (state.isGameOver) return;
   if (state.shakeIndices.length > 0) return;
   if (state.board[index].matched) return;
   if (state.selected.includes(index)) return;
@@ -117,26 +170,65 @@ function handleTileClick(index) {
     const tileA = state.board[idxA];
     const tileB = state.board[idxB];
 
-    // 配对成功：ID 相同且一个是中文一个是英文
+    // 配对成功
     if (tileA.id === tileB.id && tileA.kind !== tileB.kind) {
+      soundManager.playSuccess(); // 播放成功音效
+
       const posA = state.tilePositions[idxA];
       const posB = state.tilePositions[idxB];
 
-      // 1. 触发配对成功爆炸粒子效果[cite: 13]
-      if (posA) createExplosion(state, posA.x + posA.width / 2, posA.y + posA.height / 2, '#4caf50');
-      if (posB) createExplosion(state, posB.x + posB.width / 2, posB.y + posB.height / 2, '#4caf50');
+      const now = Date.now();
+      // 3.5 秒内连续消除算 Combo
+      if (now - state.lastMatchTime <= 3500) {
+        state.comboCount += 1;
+      } else {
+        state.comboCount = 1;
+      }
+      state.lastMatchTime = now;
 
-      // 2. 标记 matched，卡片在渲染时隐藏，但不改变数组索引，避免位置变动[cite: 13]
+      // 触发 Fever 模式（Combo >= 3）
+      if (state.comboCount >= 3) {
+        state.isFever = true;
+      }
+
+      // 算分 & 时间奖励
+      const addedTime = state.isFever ? 5 : 3;
+      const addedScore = (100 * state.comboCount) * (state.isFever ? 2 : 1);
+      state.timeLeft = Math.min(state.timeLeft + addedTime, 60); // 最多累积到 60s
+      state.score += addedScore;
+
+      // 产生粒子与提示动画
+      const centerX = posA ? posA.x + posA.width / 2 : state.width / 2;
+      const centerY = posA ? posA.y + posA.height / 2 : state.height / 2;
+
+      const explosionColor = state.isFever ? '#ff1744' : '#4caf50';
+      if (posA) createExplosion(state, posA.x + posA.width / 2, posA.y + posA.height / 2, explosionColor);
+      if (posB) createExplosion(state, posB.x + posB.width / 2, posB.y + posB.height / 2, explosionColor);
+
+      // 浮动文本
+      let floatMsg = `+${addedTime}s`;
+      if (state.comboCount > 1) {
+        floatMsg = `${state.comboCount} 连击! +${addedTime}s`;
+      }
+      if (state.isFever) {
+        floatMsg = `🔥狂暴! Combo x${state.comboCount} +${addedTime}s`;
+      }
+      createFloatText(state, floatMsg, centerX, centerY - 10, state.isFever ? '#ff1744' : '#ff9800');
+
       tileA.matched = true;
       tileB.matched = true;
       state.selected = [];
 
     } else {
-      // 🌟 配对失败：设置晃动状态
+      // 配对失败：中断 Combo，播放错误音效并产生晃动
+      soundManager.playFail();
+
+      state.comboCount = 0;
+      state.isFever = false;
+
       state.shakeIndices = [idxA, idxB];
       state.shakeStartTime = Date.now();
 
-      // 400ms 晃动结束后清除选中
       setTimeout(() => {
         state.shakeIndices = [];
         state.selected = [];

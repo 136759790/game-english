@@ -24,10 +24,60 @@ function saveStoredUser(user) {
   }
 }
 
+function getCloudEnvId() {
+  if (typeof wx === 'undefined' || !wx.getStorageSync) {
+    return '';
+  }
+
+  try {
+    const env = wx.getStorageSync('CLOUD_ENV_ID');
+    if (env && String(env).trim()) {
+      return String(env).trim();
+    }
+  } catch (err) {
+    console.warn('读取云环境ID失败', err);
+  }
+
+  return '';
+}
+
+function getCloudInstance() {
+  if (typeof globalThis !== 'undefined' && globalThis.__gameCloud && typeof globalThis.__gameCloud.callFunction === 'function') {
+    return globalThis.__gameCloud;
+  }
+
+  if (typeof wx !== 'undefined' && wx.cloud && typeof wx.cloud.callFunction === 'function') {
+    return wx.cloud;
+  }
+
+  return null;
+}
+
+function getCloudDebugInfo() {
+  const cloud = getCloudInstance();
+  const meta = globalThis && globalThis.__gameCloudConfig ? globalThis.__gameCloudConfig : {};
+
+  return {
+    hasCloud: !!cloud,
+    hasCallFunction: !!(cloud && cloud.callFunction),
+    resourceAppid: meta.resourceAppid || '',
+    resourceEnv: meta.resourceEnv || '',
+    wxCloudType: typeof (wx && wx.cloud),
+  };
+}
+
+function isCloudAvailable() {
+  return Boolean(getCloudInstance());
+}
+
 async function loginToCloudUser() {
-  if (typeof wx === 'undefined' || !wx.cloud || typeof wx.cloud.callFunction !== 'function') {
+  const cloud = getCloudInstance();
+  if (!cloud) {
+    console.log('[cloud debug] 未配置有效 CloudBase 环境，使用游客模式', getCloudDebugInfo());
     return null;
   }
+
+  console.log('[cloud debug] 发起登录调用', getCloudDebugInfo());
 
   const storedUser = getStoredUser();
   if (storedUser) {
@@ -42,8 +92,8 @@ async function loginToCloudUser() {
         fail: reject,
       });
     });
-
-    const cloudResult = await wx.cloud.callFunction({
+    console.log('[cloud debug] 登录成功', loginRes);
+    const cloudResult = await cloud.callFunction({
       name: 'ge',
       data: {
         action: 'loginUser',
@@ -52,6 +102,7 @@ async function loginToCloudUser() {
       },
     });
 
+    console.log('[cloud debug] 登录响应', cloudResult);
     const user = (cloudResult && cloudResult.result && cloudResult.result.user) || cloudResult.result || null;
     if (user) {
       saveStoredUser(user);
@@ -60,19 +111,20 @@ async function loginToCloudUser() {
 
     return null;
   } catch (err) {
-    console.warn('静默登录失败', err);
+    console.warn('云登录失败（使用游客模式）:', err && (err.errMsg || err.message) ? (err.errMsg || err.message) : err);
     return null;
   }
 }
 
 function callCloudRouter(action, payload = {}) {
-  if (typeof wx === 'undefined' || !wx.cloud || typeof wx.cloud.callFunction !== 'function') {
-    return Promise.resolve({ success: false, skipped: true });
+  const cloud = getCloudInstance();
+  if (!cloud) {
+    return Promise.resolve({ success: false, skipped: true, reason: 'cloud env not configured' });
   }
 
   const user = getStoredUser();
 
-  return wx.cloud.callFunction({
+  return cloud.callFunction({
     name: 'ge',
     data: {
       action,
@@ -81,10 +133,9 @@ function callCloudRouter(action, payload = {}) {
       userId: user ? user._id : '',
       ...payload,
     },
-    fail: (err) => {
-      console.warn(`云函数路由失败: ${action}`, err);
-      return { success: false, err: err };
-    },
+  }).catch((err) => {
+    console.warn(`云函数路由失败: ${action}`, err && (err.errMsg || err.message) ? (err.errMsg || err.message) : err);
+    return { success: false, err };
   });
 }
 
@@ -108,6 +159,9 @@ function getCurrentUserName() {
   if (typeof wx !== 'undefined' && wx.getStorageSync) {
     try {
       const user = wx.getStorageSync('ge_user_profile');
+      if (user && user.nickName) {
+        return user.nickName;
+      }
       if (user && user.username) {
         return user.username;
       }
@@ -115,7 +169,7 @@ function getCurrentUserName() {
       console.warn('读取登录用户失败', err);
     }
   }
-  return '游客';
+  return '微信用户';
 }
 
 module.exports = {

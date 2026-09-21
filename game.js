@@ -2,8 +2,9 @@ const { state, initUserName, resetCurrentLevel, setMessage, handleTileClick, CAT
 const { saveLevelProgressToCloud } = require('./js/services/cloudService');
 const { renderHomeScreen } = require('./js/views/renderHome');
 const { renderGameScreen } = require('./js/views/renderGame');
+const soundManager = require('./js/services/audio');
 
-// 🌟 1. 全局游戏渲染循环（驱动粒子爆炸动画与卡片晃动动画）
+// 全局游戏渲染循环（驱动粒子爆炸动画、狂暴光晕、浮动字与卡片晃动）
 function gameLoop() {
   if (!state.ctx) return;
 
@@ -13,19 +14,28 @@ function gameLoop() {
     renderGameScreen(state.ctx, state.width, state.height, state, CATEGORY_META);
   }
 
-  // 只要处于游戏界面，或存在动态粒子/晃动，持续更新渲染[cite: 14]
-  if (state.screen === 'game' || (state.particles && state.particles.length > 0)) {
+  // 只要处于游戏模式或包含未绘制完的动态特效，持续请求重绘
+  if (state.screen === 'game' || (state.particles && state.particles.length > 0) || (state.floatTexts && state.floatTexts.length > 0)) {
     requestAnimationFrame(gameLoop);
   }
 }
 
 function startGame() {
   state.screen = 'game';
+  soundManager.init(); // 初始化/唤醒 Web Audio Context
+  soundManager.startBGM(); // 开启背景音乐
   resetCurrentLevel();
   gameLoop();
 }
 
 async function goToNextLevelAction() {
+  if (state.isGameOver) {
+    // 失败重试本关
+    resetCurrentLevel();
+    gameLoop();
+    return;
+  }
+
   if (state.levelIndex < state.allLevels.length - 1) {
     state.levelIndex += 1;
   } else {
@@ -40,6 +50,9 @@ async function goToNextLevelAction() {
 function handleTouchStart(event) {
   if (!event || !event.changedTouches) return;
 
+  // 第一次点击激活移动设备 AudioContext 音频播放限制
+  soundManager.init();
+
   const touch = event.changedTouches[0];
   if (!touch) return;
 
@@ -53,7 +66,77 @@ function handleTouchStart(event) {
       return;
     }
   } else if (state.screen === 'game') {
-    // 1. 重置关卡
+    const settingsBtn = state.buttonBounds.settings;
+    if (settingsBtn && x >= settingsBtn.x && x <= settingsBtn.x + settingsBtn.width && y >= settingsBtn.y && y <= settingsBtn.y + settingsBtn.height) {
+      state.settingsOpen = !state.settingsOpen;
+      gameLoop();
+      return;
+    }
+
+    if (state.settingsOpen) {
+      const muteBtn = state.buttonBounds.settingsMute;
+      if (muteBtn && x >= muteBtn.x && x <= muteBtn.x + muteBtn.width && y >= muteBtn.y && y <= muteBtn.y + muteBtn.height) {
+        const nextMuted = !soundManager.isMuted();
+        soundManager.setMuted(nextMuted);
+        state.muted = nextMuted;
+        state.settingsOpen = false;
+        if (!nextMuted) {
+          soundManager.startBGM();
+        }
+        gameLoop();
+        return;
+      }
+
+      const exitBtn = state.buttonBounds.settingsExit;
+      if (exitBtn && x >= exitBtn.x && x <= exitBtn.x + exitBtn.width && y >= exitBtn.y && y <= exitBtn.y + exitBtn.height) {
+        state.settingsOpen = false;
+        const confirmExit = () => {
+          state.screen = 'home';
+          if (state.timerInterval) {
+            clearInterval(state.timerInterval);
+            state.timerInterval = null;
+          }
+          soundManager.stopBGM();
+          state.isGameOver = false;
+          state.selected = [];
+          state.shakeIndices = [];
+          gameLoop();
+        };
+
+        if (typeof wx !== 'undefined' && wx.showModal) {
+          wx.showModal({
+            title: '确认退出',
+            content: '退出后会返回首页，当前进度也会清空，是否确认？',
+            confirmText: '退出',
+            cancelText: '取消',
+            success: (res) => {
+              if (res.confirm) {
+                confirmExit();
+              }
+            },
+          });
+          return;
+        }
+
+        if (typeof window !== 'undefined' && typeof window.confirm === 'function' && window.confirm('退出后会返回首页，当前进度也会清空，是否确认？')) {
+          confirmExit();
+        }
+        return;
+      }
+
+      state.settingsOpen = false;
+    }
+
+    // 1. 下一关 / 失败重试
+    const nextBtn = state.buttonBounds.next;
+    if (nextBtn && x >= nextBtn.x && x <= nextBtn.x + nextBtn.width && y >= nextBtn.y && y <= nextBtn.y + nextBtn.height) {
+      goToNextLevelAction();
+      return;
+    }
+
+    if (state.isGameOver) return; // 游戏失败状态禁止点击棋盘与工具栏
+
+    // 2. 顶部重置
     const restartBtn = state.buttonBounds.restart;
     if (restartBtn && x >= restartBtn.x && x <= restartBtn.x + restartBtn.width && y >= restartBtn.y && y <= restartBtn.y + restartBtn.height) {
       resetCurrentLevel();
@@ -61,28 +144,17 @@ function handleTouchStart(event) {
       return;
     }
 
-    // 2. 下一关
-    const nextBtn = state.buttonBounds.next;
-    if (nextBtn && x >= nextBtn.x && x <= nextBtn.x + nextBtn.width && y >= nextBtn.y && y <= nextBtn.y + nextBtn.height) {
-      goToNextLevelAction();
-      return;
-    }
-
     // 3. 点击【💡 提示 (看广告)】
     const hintBtn = state.buttonBounds.hint;
     if (hintBtn && x >= hintBtn.x && x <= hintBtn.x + hintBtn.width && y >= hintBtn.y && y <= hintBtn.y + hintBtn.height) {
-      console.log('触发：查看广告获得提示');
       setMessage('观看广告加载中...', 'success');
-      // TODO: 接入微信激励广告接口 wx.createRewardedVideoAd()
       return;
     }
 
     // 4. 点击【🔄 刷新 (看广告)】
     const refreshBtn = state.buttonBounds.refresh;
     if (refreshBtn && x >= refreshBtn.x && x <= refreshBtn.x + refreshBtn.width && y >= refreshBtn.y && y <= refreshBtn.y + refreshBtn.height) {
-      console.log('触发：查看广告刷新卡片位置');
       setMessage('观看广告加载中...', 'success');
-      // TODO: 接入微信激励广告接口 wx.createRewardedVideoAd()
       return;
     }
 
@@ -90,7 +162,7 @@ function handleTouchStart(event) {
     for (let index = 0; index < state.tilePositions.length; index += 1) {
       const pos = state.tilePositions[index];
       if (x >= pos.x && x <= pos.x + pos.width && y >= pos.y && y <= pos.y + pos.height) {
-        handleTileClick(index); // 处理选牌与晃动判断[cite: 14]
+        handleTileClick(index);
         gameLoop();
         return;
       }
@@ -122,23 +194,10 @@ function getSystemInfo() {
   return { windowWidth: 375, windowHeight: 667 };
 }
 
-async function init() {
+function init() {
   if (typeof wx === 'undefined') {
     console.error('微信小游戏环境未就绪');
     return;
-  }
-
-  // 初始化云开发
-  if (wx.cloud) {
-    try {
-      wx.cloud.init({
-        env: 'cloud1-d8g211tvdcd31f789',
-        traceUser: true,
-      });
-      console.log('云开发初始化成功');
-    } catch (err) {
-      console.warn('云初始化失败（可能已初始化）', err);
-    }
   }
 
   state.canvas = wx.createCanvas();
@@ -165,9 +224,7 @@ async function init() {
     console.warn('绑定触摸事件失败', err.message);
   }
 
-  // 静默登录
-  await initUserName();
-
+  initUserName();
   loadBackgroundImage();
   gameLoop();
 }

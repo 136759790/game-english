@@ -49,7 +49,7 @@ function drawBackground(ctx, width, height, bgImage, bgImageLoaded) {
 
     ctx.drawImage(bgImage, nx, ny, nw, nh);
 
-    // 叠加薄纱层，增强前台文字与卡片反差
+    // 叠加薄纱层
     ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
     ctx.fillRect(0, 0, width, height);
   } else {
@@ -61,7 +61,7 @@ function drawBackground(ctx, width, height, bgImage, bgImageLoaded) {
 // 1. 创建爆炸粒子特效
 function createExplosion(state, x, y, color = '#ff9800') {
   if (!state.particles) state.particles = [];
-  const count = 24; // 粒子数量
+  const count = 24; 
   for (let i = 0; i < count; i++) {
     const angle = (Math.PI * 2 / count) * i + Math.random() * 0.5;
     const speed = Math.random() * 4 + 2;
@@ -78,28 +78,61 @@ function createExplosion(state, x, y, color = '#ff9800') {
   }
 }
 
-// 2. 更新并绘制所有粒子
+// 2. 添加浮动文字动画（Combo/+Time 提示）
+function createFloatText(state, text, x, y, color = '#ff9800') {
+  if (!state.floatTexts) state.floatTexts = [];
+  state.floatTexts.push({
+    text,
+    x,
+    y,
+    color,
+    alpha: 1,
+    scale: 1.2
+  });
+}
+
+// 3. 更新并绘制所有动态特效（粒子与浮动文字）
 function updateAndDrawParticles(ctx, state) {
-  if (!state.particles || state.particles.length === 0) return;
+  // 绘制爆炸粒子
+  if (state.particles && state.particles.length > 0) {
+    for (let i = state.particles.length - 1; i >= 0; i--) {
+      const p = state.particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.alpha -= p.decay;
 
-  for (let i = state.particles.length - 1; i >= 0; i--) {
-    const p = state.particles[i];
-    p.x += p.vx;
-    p.y += p.vy;
-    p.alpha -= p.decay;
+      if (p.alpha <= 0) {
+        state.particles.splice(i, 1);
+        continue;
+      }
 
-    if (p.alpha <= 0) {
-      state.particles.splice(i, 1);
-      continue;
+      ctx.save();
+      ctx.globalAlpha = p.alpha;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+      ctx.fillStyle = p.color;
+      ctx.fill();
+      ctx.restore();
     }
+  }
 
-    ctx.save();
-    ctx.globalAlpha = p.alpha;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-    ctx.fillStyle = p.color;
-    ctx.fill();
-    ctx.restore();
+  // 绘制浮动文字
+  if (state.floatTexts && state.floatTexts.length > 0) {
+    for (let i = state.floatTexts.length - 1; i >= 0; i--) {
+      const ft = state.floatTexts[i];
+      ft.y -= 1.5; // 向上飘动
+      ft.alpha -= 0.02; // 渐隐
+
+      if (ft.alpha <= 0) {
+        state.floatTexts.splice(i, 1);
+        continue;
+      }
+
+      ctx.save();
+      ctx.globalAlpha = ft.alpha;
+      drawText(ctx, ft.text, ft.x, ft.y, 18, ft.color, 'center', true);
+      ctx.restore();
+    }
   }
 }
 
@@ -108,5 +141,6 @@ module.exports = {
   drawText,
   drawBackground,
   createExplosion,
+  createFloatText,
   updateAndDrawParticles
 };

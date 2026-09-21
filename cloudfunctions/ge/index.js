@@ -7,23 +7,40 @@ const db = cloud.database();
 async function loginUser(data = {}) {
   const { code, userInfo = {} } = data;
   const wxContext = cloud.getWXContext();
-  const { openid, appid, unionid } = wxContext || {};
+
+  // 环境共享场景关键区别：
+  // OPENID - 资源方（小程序A）环境下的 OpenID
+  // FROM_OPENID - 调用方（小游戏B）的用户 OpenID ← 我们要这个！
+  const openid = wxContext.FROM_OPENID || wxContext.OPENID;
+  const appid = wxContext.FROM_APPID || wxContext.APPID;
+  const unionid = wxContext.UNIONID || '';
+
+  console.log('wxContext:', JSON.stringify(wxContext));
+  console.log('使用 openid:', openid);
+  console.log('openid 来源:', wxContext.FROM_OPENID ? 'FROM_OPENID(调用方)' : 'OPENID(资源方)');
+
+  // 如果仍然没有 openid，使用 code 生成临时标识（仅开发测试）
+  if (!openid && code) {
+    openid = `dev_${code.slice(-10)}`;
+    console.log('⚠️ 使用临时 openid（开发环境）:', openid);
+  }
 
   if (!openid) {
     return {
       success: false,
       errCode: 'NO_OPENID',
-      errMsg: '无法获取微信用户 openid',
+      errMsg: '无法获取用户标识，请检查云环境共享配置',
     };
   }
 
   const now = db.serverDate();
+  const defaultNick = '微信用户';
   const profile = {
     openid,
     appid,
     unionid: unionid || '',
-    username: userInfo.nickName || `wx_${openid.slice(-6)}`,
-    nickName: userInfo.nickName || '',
+    username: userInfo.nickName || defaultNick,
+    nickName: userInfo.nickName || defaultNick,
     avatarUrl: userInfo.avatarUrl || '',
     gender: userInfo.gender || 0,
     city: userInfo.city || '',
