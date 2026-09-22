@@ -18,8 +18,8 @@ function renderGameScreen(ctx, width, height, state, CATEGORY_META) {
   const level = state.allLevels[state.levelIndex];
   const totalInCategory = CATEGORY_META.find((item) => item.name === level.category)?.totalLevels || 20;
 
-  // 2. 顶部信息栏：下移，避免与微信原生按钮重叠
-  const topBarY = 82;
+  // 2. 顶部信息栏：避开微信胶囊按钮
+  const topBarY = 115;
   const settingsBtnWidth = 58;
   const settingsBtnHeight = 30;
   const settingsBtnX = 14;
@@ -69,12 +69,10 @@ function renderGameScreen(ctx, width, height, state, CATEGORY_META) {
     state.buttonBounds.settingsExit = null;
   }
 
-  // 🌟 3. 倒计时 & 得分 Dashboard 仪表盘
-  const dashY = topBarY + 42;
-  // 得分显示
+  // 3. 倒计时 & 得分 Dashboard 仪表盘
+  const dashY = topBarY + 38;
   drawText(ctx, `得分: ${state.score}`, 24, dashY, 15, '#d84315', 'left', true);
 
-  // Combo / Fever 标识
   if (state.isFever) {
     drawText(ctx, `🔥 FEVER狂暴 (双倍积分)`, width - 24, dashY, 13, '#d50000', 'right', true);
   } else if (state.comboCount > 1) {
@@ -82,12 +80,12 @@ function renderGameScreen(ctx, width, height, state, CATEGORY_META) {
   }
 
   // 倒计时进度条
-  const progressY = dashY + 12;
+  const progressY = dashY + 10;
   const progressW = width - 48;
-  const progressH = 10;
-  drawRoundedRect(ctx, 24, progressY, progressW, progressH, 5, '#e0e0e0', null, 0);
+  const progressH = 8;
+  drawRoundedRect(ctx, 24, progressY, progressW, progressH, 4, '#e0e0e0', null, 0);
 
-  const timeRatio = Math.min(Math.max(state.timeLeft / 60, 0), 1); // 上限 60s
+  const timeRatio = Math.min(Math.max(state.timeLeft / 60, 0), 1);
   const barGrad = ctx.createLinearGradient(24, 0, 24 + progressW * timeRatio, 0);
   if (state.timeLeft <= 5) {
     barGrad.addColorStop(0, '#ff5252');
@@ -98,25 +96,26 @@ function renderGameScreen(ctx, width, height, state, CATEGORY_META) {
   }
 
   if (timeRatio > 0) {
-    drawRoundedRect(ctx, 24, progressY, progressW * timeRatio, progressH, 5, barGrad, null, 0);
+    drawRoundedRect(ctx, 24, progressY, progressW * timeRatio, progressH, 4, barGrad, null, 0);
   }
-  drawText(ctx, `⏱️ ${state.timeLeft}s`, width / 2, progressY + 16, 12, state.timeLeft <= 5 ? '#d50000' : '#5d4037', 'center', true);
+  drawText(ctx, `⏱️ ${state.timeLeft}s`, width / 2, progressY + 14, 12, state.timeLeft <= 5 ? '#d50000' : '#5d4037', 'center', true);
 
-  // 🌟 4. 棋盘绘制 (占满视口)
-  const bottomBarHeight = 66;
-  const startY = progressY + 28;
-  const gap = 8;
+  // 🌟 4. 棋盘绘制：放大卡片尺寸
+  const bottomBarHeight = 60;
+  const startY = progressY + 22; // 缩减上方留白，增大卡片区域
+  const gap = 10; // 稍微加大卡片间距，增强点击舒适度
   const cols = 3;
-  const panelX = 10;
-  const panelPadding = 8;
+  const panelX = 12;
+  const panelPadding = 10;
   const panelWidth = width - panelX * 2;
   const tileWidth = (panelWidth - panelPadding * 2 - gap * (cols - 1)) / cols;
 
   const boardRows = Math.ceil(state.board.length / cols) || 4;
-  const availableHeight = height - startY - bottomBarHeight - 12;
+  const availableHeight = height - startY - bottomBarHeight - 16;
 
+  // 🌟 放大卡片：解除 72px 限制，允许卡片根据屏幕高度自适应拉大（最大支持 110px）
   let tileHeight = Math.floor((availableHeight - panelPadding * 2 - gap * (boardRows - 1)) / boardRows);
-  tileHeight = Math.min(Math.max(tileHeight, 46), 72);
+  tileHeight = Math.min(Math.max(tileHeight, 60), 110); 
 
   const panelY = startY;
   const panelHeight = boardRows * tileHeight + (boardRows - 1) * gap + panelPadding * 2;
@@ -189,12 +188,13 @@ function renderGameScreen(ctx, width, height, state, CATEGORY_META) {
       ctx.shadowOffsetY = 1;
     }
 
-    drawRoundedRect(ctx, x, y, tileWidth, tileHeight, 10, cardGrad, borderColor, selected ? 2.5 : 1.2);
+    drawRoundedRect(ctx, x, y, tileWidth, tileHeight, 12, cardGrad, borderColor, selected ? 2.5 : 1.2);
     ctx.restore();
 
-    let fontSize = 13;
-    if (tile.text.length > 8) fontSize = 11;
-    else if (tile.text.length > 5) fontSize = 12;
+    // 🌟 配合变大的卡片，放大字体尺寸
+    let fontSize = 16;
+    if (tile.text.length > 8) fontSize = 12;
+    else if (tile.text.length > 5) fontSize = 14;
 
     drawText(ctx, tile.text, x + tileWidth / 2, y + tileHeight / 2, fontSize, textColor, 'center', true);
   });
@@ -205,23 +205,22 @@ function renderGameScreen(ctx, width, height, state, CATEGORY_META) {
   }
 
   // 6. 底部广告工具栏
-  const menuY = height - bottomBarHeight + 8;
+  const menuY = height - bottomBarHeight + 6;
   const btnW = (width - 48) / 2;
-  const btnH = 42;
+  const btnH = 40;
 
   const hintX = 16;
-  drawRoundedRect(ctx, hintX, menuY, btnW, btnH, 21, '#ffffff', '#ffb74d', 1.5);
+  drawRoundedRect(ctx, hintX, menuY, btnW, btnH, 20, '#ffffff', '#ffb74d', 1.5);
   drawText(ctx, '💡 提示 (看广告)', hintX + btnW / 2, menuY + btnH / 2, 13, '#e65100', 'center', true);
   state.buttonBounds.hint = { x: hintX, y: menuY, width: btnW, height: btnH };
 
   const refreshX = width - 16 - btnW;
-  drawRoundedRect(ctx, refreshX, menuY, btnW, btnH, 21, '#ffffff', '#ffb74d', 1.5);
+  drawRoundedRect(ctx, refreshX, menuY, btnW, btnH, 20, '#ffffff', '#ffb74d', 1.5);
   drawText(ctx, '🔄 刷新 (看广告)', refreshX + btnW / 2, menuY + btnH / 2, 13, '#e65100', 'center', true);
   state.buttonBounds.refresh = { x: refreshX, y: menuY, width: btnW, height: btnH };
 
-  // 🌟 7. 结算逻辑：超时失败 OR 通关
+  // 7. 结算逻辑
   if (state.isGameOver) {
-    // 遮罩层
     ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
     ctx.fillRect(0, 0, width, height);
 
@@ -234,7 +233,6 @@ function renderGameScreen(ctx, width, height, state, CATEGORY_META) {
     drawText(ctx, '⌛ 时间耗尽', width / 2, dialogY + 35, 20, '#d84315', 'center', true);
     drawText(ctx, `最终得分: ${state.score}`, width / 2, dialogY + 70, 15, '#5d4037', 'center', true);
 
-    // 再试一次按钮
     const retryBtnW = 120;
     const retryBtnH = 36;
     const retryBtnX = (width - retryBtnW) / 2;
@@ -245,7 +243,6 @@ function renderGameScreen(ctx, width, height, state, CATEGORY_META) {
     state.buttonBounds.next = { x: retryBtnX, y: retryBtnY, width: retryBtnW, height: retryBtnH };
 
   } else {
-    // 通关检测
     const isAllMatched = state.board.length > 0 && state.board.every((tile) => tile.matched);
     if (isAllMatched) {
       const nextBtnWidth = 160;
