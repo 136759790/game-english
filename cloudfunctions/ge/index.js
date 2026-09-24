@@ -144,6 +144,50 @@ async function getLeaderboard() {
   };
 }
 
+// 记录关卡通过信息到 ge_level_record 表
+async function recordLevelRecord(data = {}) {
+  const {
+    userId = '',
+    openid = '',
+    dict = 'PEP_SL_XiaoXue5_1_t',
+    questionBank = '',
+    level = 1,
+    passedLevel = 1,
+    score = 0,
+    timeLeft = 0,
+    passTime = '',
+  } = data;
+
+  const targetDict = dict || questionBank || 'PEP_SL_XiaoXue5_1_t';
+  const now = db.serverDate();
+  const passTimeStr = passTime || new Date().toISOString();
+  const levelVal = Number(level) || 1;
+
+  const record = {
+    userId: userId || openid || 'guest',
+    openid: openid || '',
+    dict: targetDict,
+    questionBank: targetDict,
+    level: levelVal, // 关卡：比如存 2 或 3
+    passedLevel: Number(passedLevel) || (levelVal > 1 ? levelVal - 1 : 1),
+    score: Number(score) || 0,
+    timeLeft: Number(timeLeft) || 0,
+    passTime: passTimeStr,
+    passedAt: now,
+    createdAt: now,
+  };
+
+  const result = await db.collection('ge_level_record').add({
+    data: record,
+  });
+
+  return {
+    success: true,
+    _id: result._id,
+    data: record,
+  };
+}
+
 exports.main = async (event = {}, context) => {
   const action = event.action || event.type || 'unknown';
   const payload = event.data || event;
@@ -153,6 +197,9 @@ exports.main = async (event = {}, context) => {
       return loginUser(payload);
     case 'recordWordScore':
       return recordWordScore(payload);
+    case 'recordLevelRecord':
+    case 'recordLevelPass':
+      return recordLevelRecord(payload);
     case 'getLeaderboard':
       return getLeaderboard(payload);
     default:
