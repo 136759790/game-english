@@ -64,9 +64,14 @@ class SoundManager {
   init() {
     if (this.muted) return;
     if (!this.ctx) {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (AudioCtx) {
+      // 微信小程序环境不支持 window.AudioContext
+      if (typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext)) {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
         this.ctx = new AudioCtx();
+      } else if (typeof wx !== 'undefined' && wx.createInnerAudioContext) {
+        // 微信小程序环境使用 wx.createInnerAudioContext
+        // 但这里我们只需要一个标记表示已初始化，实际音频用 wx API
+        this.ctx = { isWxEnv: true };
       }
     }
     if (this.ctx && this.ctx.state === 'suspended') {
@@ -138,13 +143,30 @@ class SoundManager {
 
   playToneAt(freq, type, duration, volume, startTime) {
     try {
+      // 微信小程序环境使用 wx.createInnerAudioContext
+      if (this.ctx && this.ctx.isWxEnv) {
+        if (typeof wx === 'undefined' || !wx.createInnerAudioContext) return;
+        
+        const audio = wx.createInnerAudioContext();
+        // 由于 InnerAudioContext 不支持动态生成音频，这里我们简化处理
+        // 实际项目中建议使用预加载的音频文件
+        audio.volume = volume;
+        audio.onError(() => {
+          // 忽略错误，微信小程序环境不支持动态音频生成
+        });
+        audio.destroy();
+        return;
+      }
+
+      // Web 环境使用 AudioContext
+      if (!this.ctx) return;
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
 
       osc.type = type;
       osc.frequency.setValueAtTime(freq, startTime);
 
-      // 音量渐隐，避免“咔哒”杂音
+      // 音量渐隐，避免"咔哒"杂音
       gain.gain.setValueAtTime(volume, startTime);
       gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
 

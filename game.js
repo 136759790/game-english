@@ -1,12 +1,111 @@
+const { initCloud } = require('./js/services/cloud');
 const { state, initUserName, resetCurrentLevel, setMessage, handleTileClick, CATEGORY_META, applyDictionaryOption } = require('./js/state');
-const { saveLevelProgressToCloud } = require('./js/services/cloudService');
+const { saveLevelProgressToCloud, loginToCloudUser } = require('./js/services/cloudService');
 const { renderHomeScreen, renderDictionaryScreen } = require('./js/views/renderHome');
 const { renderGameScreen } = require('./js/views/renderGame');
 const soundManager = require('./js/services/audio');
 
+// 加载状态管理
+const loadingState = {
+  step: 0,           // 当前步骤：0-初始化, 1-登录, 2-加载词库
+  steps: [
+    '初始化云环境...',
+    '登录中...',
+    '加载词库...'
+  ],
+  progress: 0,       // 进度百分比
+  animFrameId: null, // 动画帧 ID，用于取消加载动画
+  isActive: false    // 是否正在显示加载界面
+};
+
+// 渲染加载界面
+function renderLoadingScreen(ctx, width, height) {
+  if (!ctx || !loadingState.isActive) return;
+
+  // 清空画布
+  ctx.clearRect(0, 0, width, height);
+  
+  // 背景色
+  ctx.fillStyle = '#1a1a2e';
+  ctx.fillRect(0, 0, width, height);
+
+  const centerX = width / 2;
+  const centerY = height / 2;
+
+  // 标题
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 28px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('英语单词消消乐', centerX, centerY - 80);
+
+  // 加载提示
+  ctx.fillStyle = '#a0a0a0';
+  ctx.font = '16px Arial';
+  const currentStep = loadingState.steps[loadingState.step] || '准备中...';
+  ctx.fillText(currentStep, centerX, centerY - 30);
+
+  // 进度条背景
+  const barWidth = width * 0.6;
+  const barHeight = 8;
+  const barX = centerX - barWidth / 2;
+  const barY = centerY + 10;
+  
+  ctx.fillStyle = '#333333';
+  ctx.fillRect(barX, barY, barWidth, barHeight);
+
+  // 进度条前景
+  const progressWidth = (barWidth * loadingState.progress) / 100;
+  ctx.fillStyle = '#4CAF50';
+  ctx.fillRect(barX, barY, progressWidth, barHeight);
+
+  // 进度百分比
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '14px Arial';
+  ctx.fillText(`${loadingState.progress}%`, centerX, centerY + 40);
+
+  // 加载动画（旋转圆点）
+  const dotCount = 3;
+  const dotRadius = 6;
+  const spacing = 20;
+  const time = Date.now() / 500;
+  
+  for (let i = 0; i < dotCount; i++) {
+    const offset = (time + i) % dotCount;
+    const alpha = Math.max(0.3, 1 - offset / dotCount);
+    ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+    ctx.beginPath();
+    ctx.arc(centerX + (i - 1) * spacing, centerY + 70, dotRadius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // 继续重绘加载动画
+  loadingState.animFrameId = requestAnimationFrame(() => renderLoadingScreen(ctx, width, height));
+}
+
+// 停止加载界面
+function stopLoadingScreen() {
+  loadingState.isActive = false;
+  if (loadingState.animFrameId) {
+    cancelAnimationFrame(loadingState.animFrameId);
+    loadingState.animFrameId = null;
+  }
+}
+
 // 全局游戏渲染循环（驱动粒子爆炸动画、狂暴光晕、浮动字与卡片晃动）
-function gameLoop() {
+let lastFrameTime = 0;
+const FRAME_INTERVAL = 1000 / 30; // 限制 30 FPS，避免过度渲染
+
+function gameLoop(timestamp = 0) {
   if (!state.ctx) return;
+
+  // 限制帧率，避免过度渲染导致卡顿
+  if (timestamp - lastFrameTime < FRAME_INTERVAL) {
+    if (state.screen === 'game' || (state.particles && state.particles.length > 0) || (state.floatTexts && state.floatTexts.length > 0)) {
+      requestAnimationFrame(gameLoop);
+    }
+    return;
+  }
+  lastFrameTime = timestamp;
 
   if (state.screen === 'home') {
     renderHomeScreen(state.ctx, state.width, state.height, state, CATEGORY_META);
@@ -259,21 +358,7 @@ function handleTouchStart(event) {
       return;
     }
 
-    // 3. 点击【💡 提示 (看广告)】
-    const hintBtn = state.buttonBounds.hint;
-    if (hintBtn && x >= hintBtn.x && x <= hintBtn.x + hintBtn.width && y >= hintBtn.y && y <= hintBtn.y + hintBtn.height) {
-      setMessage('观看广告加载中...', 'success');
-      return;
-    }
-
-    // 4. 点击【🔄 刷新 (看广告)】
-    const refreshBtn = state.buttonBounds.refresh;
-    if (refreshBtn && x >= refreshBtn.x && x <= refreshBtn.x + refreshBtn.width && y >= refreshBtn.y && y <= refreshBtn.y + refreshBtn.height) {
-      setMessage('观看广告加载中...', 'success');
-      return;
-    }
-
-    // 5. 点击词卡
+    // 3. 点击词卡
     for (let index = 0; index < state.tilePositions.length; index += 1) {
       const pos = state.tilePositions[index];
       if (x >= pos.x && x <= pos.x + pos.width && y >= pos.y && y <= pos.y + pos.height) {
@@ -339,8 +424,51 @@ function init() {
     console.warn('绑定触摸事件失败', err.message);
   }
 
-  initUserName();
-  applyDictionaryOption(state.selectedDictionary).finally(() => {
+  // 显示加载界面
+  console.log('[初始化] 开始初始化...');
+  loadingState.step = 0;
+  loadingState.progress = 0;
+  loadingState.isActive = true;
+  renderLoadingScreen(state.ctx, state.width, state.height);
+
+  // 步骤 1: 初始化云环境
+  initCloud().then((cloudInstance) => {
+    loadingState.progress = 33;
+    console.log('[初始化] 云环境初始化完成');
+
+    // 步骤 2: 登录
+    loadingState.step = 1;
+    return loginToCloudUser(cloudInstance);
+  }).then((user) => {
+    loadingState.progress = 66;
+    if (user) {
+      console.log('[初始化] 登录成功:', user.username || user.nickName || '用户');
+      state.userName = user.nickName || user.username || '微信用户';
+    } else {
+      console.log('[初始化] 使用游客模式');
+      state.userName = '游客';
+    }
+
+    // 步骤 3: 加载词库
+    loadingState.step = 2;
+    return applyDictionaryOption(state.selectedDictionary);
+  }).then(() => {
+    loadingState.progress = 100;
+    console.log('[初始化] 词库加载完成');
+
+    // 停止加载界面
+    stopLoadingScreen();
+
+    // 加载背景图并进入游戏
+    loadBackgroundImage();
+    gameLoop();
+  }).catch((err) => {
+    console.warn('[初始化] 出错:', err);
+    loadingState.progress = 100;
+    
+    // 停止加载界面
+    stopLoadingScreen();
+    
     loadBackgroundImage();
     gameLoop();
   });

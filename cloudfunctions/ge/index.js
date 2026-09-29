@@ -70,6 +70,8 @@ async function loginUser(data = {}) {
         ...currentUser,
         ...profile,
         _id: currentUser._id,
+        maxPassedLevel: currentUser.maxPassedLevel || {},
+        lastPlayedDict: currentUser.lastPlayedDict || '',
       },
     };
   }
@@ -83,6 +85,8 @@ async function loginUser(data = {}) {
     user: {
       ...profile,
       _id: addResult._id,
+      maxPassedLevel: {},
+      lastPlayedDict: '',
     },
   };
 }
@@ -162,14 +166,15 @@ async function recordLevelRecord(data = {}) {
   const now = db.serverDate();
   const passTimeStr = passTime || new Date().toISOString();
   const levelVal = Number(level) || 1;
+  const passedLevelVal = Number(passedLevel) || (levelVal > 1 ? levelVal - 1 : 1);
 
   const record = {
     userId: userId || openid || 'guest',
     openid: openid || '',
     dict: targetDict,
     questionBank: targetDict,
-    level: levelVal, // 关卡：比如存 2 或 3
-    passedLevel: Number(passedLevel) || (levelVal > 1 ? levelVal - 1 : 1),
+    level: levelVal,
+    passedLevel: passedLevelVal,
     score: Number(score) || 0,
     timeLeft: Number(timeLeft) || 0,
     passTime: passTimeStr,
@@ -181,10 +186,168 @@ async function recordLevelRecord(data = {}) {
     data: record,
   });
 
+  // 更新用户的最高通关关卡记录
+  try {
+    const userQuery = await db.collection('ge_user').where({ openid: openid || '' }).limit(1).get();
+    if (userQuery.data && userQuery.data.length > 0) {
+      const userDoc = userQuery.data[0];
+      const userDocId = userDoc._id;
+      
+      const currentMaxLevel = (userDoc.maxPassedLevel && userDoc.maxPassedLevel[targetDict]) || 0;
+      
+      if (passedLevelVal > currentMaxLevel) {
+        const maxPassedLevel = userDoc.maxPassedLevel || {};
+        maxPassedLevel[targetDict] = passedLevelVal;
+        
+        await db.collection('ge_user').doc(userDocId).update({
+          data: {
+            maxPassedLevel,
+            lastPlayedDict: targetDict,
+            updatedAt: now,
+          },
+        });
+        
+        console.log(`[关卡记录] 更新用户最高关卡: ${targetDict} 第 ${passedLevelVal} 关`);
+      }
+    }
+  } catch (err) {
+    console.warn('[关卡记录] 更新用户最高关卡失败:', err);
+  }
+
   return {
     success: true,
     _id: result._id,
     data: record,
+  };
+}
+
+// 记录错题到 ge_mistake_records 表
+async function recordMistake(data = {}) {
+  const {
+    userId = '',
+    openid = '',
+    dict = 'PEP_SL_XiaoXue5_1_t',
+    wordEn = '',
+    wordCn = '',
+    level = 1,
+    mistakeTime = '',
+  } = data;
+
+  const targetDict = dict || 'PEP_SL_XiaoXue5_1_t';
+  const now = db.serverDate();
+  const mistakeTimeStr = mistakeTime || new Date().toISOString();
+
+  // 查找是否已存在该单词的错题记录
+  const existingQuery = await db.collection('ge_mistake_records')
+    .where({
+      userId: userId || openid || 'guest',
+      dict: targetDict,
+      wordEn: wordEn,
+    })
+    .limit(1)
+    .get();
+
+  if (existingQuery.data && existingQuery.data.length > 0) {
+    // 已存在，更新错误次数和最后错误时间
+    const existingDoc = existingQuery.data[0];
+    const docId = existingDoc._id;
+    
+    await db.collection('ge_mistake_records').doc(docId).update({
+      data: {
+        mistakeCount: db.command.inc(1),
+        lastMistakeTime: mistakeTimeStr,
+        updatedAt: now,
+      },
+    });
+
+    console.log(`[错题本] 更新错题记录: ${wordEn} (错误次数: ${existingDoc.mistakeCount + 1})`);
+    
+    return {
+      success: true,
+      action: 'updated',
+      _id: docId,
+      mistakeCount: (existingDoc.mistakeCount || 0) + 1,
+    };
+  } else {
+    // 不存在，创建新记录
+    const record = {
+      userId: userId || openid || 'guest',
+      openid: openid || '',
+      dict: targetDict,
+      wordEn: wordEn,
+      wordCn: wordCn || '',
+      level: Number(level) || 1,
+      mistakeCount: 1,
+      correctCount: 0,
+      firstMistakeTime: mistakeTimeStr,
+      lastMistakeTime: mistakeTimeStr,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const result = await db.collection('ge_mistake_records').add({
+      data: record,
+    });
+
+    console.log(`[错题本] 新增错题: ${wordEn}`);
+    
+    return {
+      success: true,
+      action: 'created',
+      _id: result._id,
+      mistakeCount: 1,
+    };
+  }
+}
+
+// 更新错题的正确回答次数
+async function updateMistakeCorrect(data = {}) {
+  const {
+    userId = '',
+    openid = '',
+    dict = 'PEP_SL_XiaoXue5_1_t',
+    wordEn = '',
+  } = data;
+
+  const targetDict = dict || 'PEP_SL_XiaoXue5_1_t';
+  const now = db.serverDate();
+
+  // 查找该单词的错题记录
+  const existingQuery = await db.collection('ge_mistake_records')
+    .where({
+      userId: userId || openid || 'guest',
+      dict: targetDict,
+      wordEn: wordEn,
+    })
+    .limit(1)
+    .get();
+
+  if (existingQuery.data && existingQuery.data.length > 0) {
+    const existingDoc = existingQuery.data[0];
+    const docId = existingDoc._id;
+    const newCorrectCount = (existingDoc.correctCount || 0) + 1;
+
+    await db.collection('ge_mistake_records').doc(docId).update({
+      data: {
+        correctCount: newCorrectCount,
+        lastCorrectTime: new Date().toISOString(),
+        updatedAt: now,
+      },
+    });
+
+    console.log(`[错题本] 更新正确次数: ${wordEn} (正确次数: ${newCorrectCount})`);
+    
+    return {
+      success: true,
+      wordEn,
+      correctCount: newCorrectCount,
+      mistakeCount: existingDoc.mistakeCount || 0,
+    };
+  }
+
+  return {
+    success: false,
+    reason: 'mistake_not_found',
   };
 }
 
@@ -200,6 +363,10 @@ exports.main = async (event = {}, context) => {
     case 'recordLevelRecord':
     case 'recordLevelPass':
       return recordLevelRecord(payload);
+    case 'recordMistake':
+      return recordMistake(payload);
+    case 'updateMistakeCorrect':
+      return updateMistakeCorrect(payload);
     case 'getLeaderboard':
       return getLeaderboard(payload);
     default:

@@ -38,74 +38,73 @@ function renderGameScreen(ctx, width, height, state, CATEGORY_META) {
   const backBtnW = 56;
   const backBtnX = marginX;
   const backBtnY = topBarY;
-  drawRoundedRect(ctx, backBtnX, backBtnY, backBtnW, topBarHeight, 12, '#fff3e0', '#ffb74d', 1.8);
-  drawText(ctx, '◀ 返回', backBtnX + backBtnW / 2, backBtnY + topBarHeight / 2 + 1, 12, '#e65100', 'center', true);
+  drawRoundedRect(ctx, backBtnX, backBtnY, backBtnW, topBarHeight, 12, '#f1f8e9', '#c5e1a5', 1.8);
+  drawText(ctx, '◀ 返回', backBtnX + backBtnW / 2, backBtnY + topBarHeight / 2 + 1, 12, '#33691e', 'center', true);
   state.buttonBounds.backHome = { x: backBtnX, y: backBtnY, width: backBtnW, height: topBarHeight };
 
-  // 2.2 ⚙ 设置按钮（最右端对齐，右边不留无用空间）
+  // 2.2 ⚙ 设置按钮（最右端对齐）
   const settingsBtnWidth = 56;
   const settingsBtnX = width - marginX - settingsBtnWidth;
   const settingsBtnY = topBarY;
   const settingsPanelW = 120;
   const settingsPanelH = 84;
 
-  drawRoundedRect(ctx, settingsBtnX, settingsBtnY, settingsBtnWidth, topBarHeight, 12, '#fff3e0', '#ffb74d', 1.8);
-  drawText(ctx, '⚙ 设置', settingsBtnX + settingsBtnWidth / 2, settingsBtnY + topBarHeight / 2 + 1, 12, '#e65100', 'center', true);
+  drawRoundedRect(ctx, settingsBtnX, settingsBtnY, settingsBtnWidth, topBarHeight, 12, '#f1f8e9', '#c5e1a5', 1.8);
+  drawText(ctx, '⚙ 设置', settingsBtnX + settingsBtnWidth / 2, settingsBtnY + topBarHeight / 2 + 1, 12, '#33691e', 'center', true);
   state.buttonBounds.settings = { x: settingsBtnX, y: settingsBtnY, width: settingsBtnWidth, height: topBarHeight };
 
-  // 2.3 中间关卡标题栏（沾满两端中间的所有空间）
+  // 2.3 中间关卡标题栏
   const titleBarX = backBtnX + backBtnW + btnGap;
   const titleBarWidth = settingsBtnX - btnGap - titleBarX;
-  drawRoundedRect(ctx, titleBarX, topBarY, titleBarWidth, topBarHeight, 14, 'rgba(255, 255, 255, 0.95)', '#ffe0b2', 1.5);
-  drawText(ctx, `${level.category} • ${level.number}/${totalInCategory}关`, titleBarX + titleBarWidth / 2, topBarY + topBarHeight / 2 + 1, 12, '#e65100', 'center', true);
+  drawRoundedRect(ctx, titleBarX, topBarY, titleBarWidth, topBarHeight, 14, 'rgba(255, 255, 255, 0.92)', '#c5e1a5', 1.5);
+  drawText(ctx, `${level.category} • ${level.number}/${totalInCategory}关`, titleBarX + titleBarWidth / 2, topBarY + topBarHeight / 2 + 1, 12, '#2e7d32', 'center', true);
 
   // 清除重置按钮绑定
   state.buttonBounds.restart = null;
 
-  // 下拉设置菜单面板（挂载在右侧设置按钮下方）
+  // 下拉设置菜单面板
   if (state.settingsOpen) {
     const menuX = settingsBtnX + settingsBtnWidth - settingsPanelW;
     const menuY = settingsBtnY + topBarHeight + 6;
-    drawRoundedRect(ctx, menuX, menuY, settingsPanelW, settingsPanelH, 14, 'rgba(255,255,255,0.98)', '#ffd180', 1.5);
+    drawRoundedRect(ctx, menuX, menuY, settingsPanelW, settingsPanelH, 14, 'rgba(255,255,255,0.98)', '#c5e1a5', 1.5);
 
     const muteLabel = state.muted ? '🔊 开音' : '🔇 静音';
     const muteBtnX = menuX + 10;
     const muteBtnY = menuY + 12;
     const itemW = settingsPanelW - 20;
     const itemH = 26;
-    drawRoundedRect(ctx, muteBtnX, muteBtnY, itemW, itemH, 10, '#fff3e0', '#ffb74d', 1.4);
-    drawText(ctx, muteLabel, muteBtnX + itemW / 2, muteBtnY + itemH / 2 + 1, 12, '#e65100', 'center', true);
+    drawRoundedRect(ctx, muteBtnX, muteBtnY, itemW, itemH, 10, '#f1f8e9', '#c5e1a5', 1.4);
+    drawText(ctx, muteLabel, muteBtnX + itemW / 2, muteBtnY + itemH / 2 + 1, 12, '#33691e', 'center', true);
     state.buttonBounds.settingsMute = { x: muteBtnX, y: muteBtnY, width: itemW, height: itemH };
 
     const exitBtnX = menuX + 10;
     const exitBtnY = menuY + 46;
-    drawRoundedRect(ctx, exitBtnX, exitBtnY, itemW, itemH, 10, '#fff8e1', '#ffcc80', 1.4);
-    drawText(ctx, '↩ 返回首页', exitBtnX + itemW / 2, exitBtnY + itemH / 2 + 1, 12, '#5d4037', 'center', true);
+    drawRoundedRect(ctx, exitBtnX, exitBtnY, itemW, itemH, 10, '#f9fbe7', '#dce775', 1.4);
+    drawText(ctx, '↩ 返回首页', exitBtnX + itemW / 2, exitBtnY + itemH / 2 + 1, 12, '#33691e', 'center', true);
     state.buttonBounds.settingsExit = { x: exitBtnX, y: exitBtnY, width: itemW, height: itemH };
   } else {
     state.buttonBounds.settingsMute = null;
     state.buttonBounds.settingsExit = null;
   }
 
-  // 🌟 3. 核心仪表盘（全新磨砂白底卡片容器，清晰突出倒计时与关键数据）
+  // 🌟 3. 核心仪表盘
   const dashCardX = marginX;
   const dashCardW = width - marginX * 2;
   const dashCardY = topBarY + topBarHeight + 8;
   const dashCardH = 48;
 
-  // 3.1 绘制仪表盘背景底卡
   ctx.save();
   ctx.shadowColor = 'rgba(0, 0, 0, 0.05)';
   ctx.shadowBlur = 8;
   ctx.shadowOffsetY = 2;
-  drawRoundedRect(ctx, dashCardX, dashCardY, dashCardW, dashCardH, 14, 'rgba(255, 255, 255, 0.95)', '#ffe0b2', 1.5);
+  drawRoundedRect(ctx, dashCardX, dashCardY, dashCardW, dashCardH, 14, 'rgba(255, 255, 255, 0.92)', '#c5e1a5', 1.5);
   ctx.restore();
 
   const isDanger = state.timeLeft <= 5;
   const contentCenterY = dashCardY + 19;
 
   // 3.2 仪表盘左侧：得分
-  drawText(ctx, `⭐ 得分 ${state.score}`, dashCardX + 12, contentCenterY, 13, '#e65100', 'left', true);
+  drawText(ctx, `⭐ 得分 ${state.score}`, dashCardX + 12, contentCenterY, 13, '#2e7d32', 'left', true);
 
   // 3.3 仪表盘中间：独立高亮倒计时胶囊标签
   const pillW = 96;
@@ -122,26 +121,26 @@ function renderGameScreen(ctx, width, height, state, CATEGORY_META) {
     ctx.restore();
     drawText(ctx, `⚠️ 剩 ${state.timeLeft} 秒`, width / 2, pillY + pillH / 2 + 1, 13, '#c62828', 'center', true);
   } else {
-    drawRoundedRect(ctx, pillX, pillY, pillW, pillH, 13, '#fff3e0', '#ffb74d', 1.4);
-    drawText(ctx, `⏰ 剩 ${state.timeLeft} 秒`, width / 2, pillY + pillH / 2 + 1, 13, '#e65100', 'center', true);
+    drawRoundedRect(ctx, pillX, pillY, pillW, pillH, 13, '#f1f8e9', '#c5e1a5', 1.4);
+    drawText(ctx, `⏰ 剩 ${state.timeLeft} 秒`, width / 2, pillY + pillH / 2 + 1, 13, '#33691e', 'center', true);
   }
 
-  // 3.4 仪表盘右侧：状态（FEVER / Combo / 配对加时）
+  // 3.4 仪表盘右侧：状态
   const rightX = dashCardX + dashCardW - 12;
   if (state.isFever) {
     drawText(ctx, '🔥 FEVER双倍', rightX, contentCenterY, 12, '#d50000', 'right', true);
   } else if (state.comboCount > 1) {
-    drawText(ctx, `⚡ 连击 x${state.comboCount}`, rightX, contentCenterY, 12, '#ff6d00', 'right', true);
+    drawText(ctx, `⚡ 连击 x${state.comboCount}`, rightX, contentCenterY, 12, '#558b2f', 'right', true);
   } else {
-    drawText(ctx, '配对+3秒', rightX, contentCenterY, 11, '#8d6e63', 'right', false);
+    drawText(ctx, '配对+3秒', rightX, contentCenterY, 11, '#558b2f', 'right', false);
   }
 
-  // 3.5 仪表盘底部：倒计时微型进度条（卡片底沿一体化）
+  // 3.5 仪表盘底部：倒计时微型进度条
   const progressX = dashCardX + 10;
   const progressY = dashCardY + dashCardH - 7;
   const progressW = dashCardW - 20;
   const progressH = 4;
-  drawRoundedRect(ctx, progressX, progressY, progressW, progressH, 2, '#f0f0f0', null, 0);
+  drawRoundedRect(ctx, progressX, progressY, progressW, progressH, 2, '#e0e0e0', null, 0);
 
   const timeRatio = Math.min(Math.max(state.timeLeft / 60, 0), 1);
   if (timeRatio > 0) {
@@ -150,14 +149,13 @@ function renderGameScreen(ctx, width, height, state, CATEGORY_META) {
       barGrad.addColorStop(0, '#ff5252');
       barGrad.addColorStop(1, '#ff1744');
     } else {
-      barGrad.addColorStop(0, '#ffb74d');
-      barGrad.addColorStop(1, '#f57c00');
+      barGrad.addColorStop(0, '#aed581');
+      barGrad.addColorStop(1, '#689f38');
     }
     drawRoundedRect(ctx, progressX, progressY, progressW * timeRatio, progressH, 2, barGrad, null, 0);
   }
 
-  // 4. 棋盘绘制（小尺寸精致卡片）
-  const bottomBarHeight = 60;
+  // 4. 棋盘绘制
   const startY = dashCardY + dashCardH + 8;
   const gap = 6;
   const cols = 4;
@@ -167,7 +165,7 @@ function renderGameScreen(ctx, width, height, state, CATEGORY_META) {
   const tileWidth = (panelWidth - panelPadding * 2 - gap * (cols - 1)) / cols;
 
   const boardRows = Math.ceil(state.board.length / cols) || 4;
-  const availableHeight = height - startY - bottomBarHeight - 16;
+  const availableHeight = height - startY - 16;
 
   let tileHeight = Math.floor((availableHeight - panelPadding * 2 - gap * (boardRows - 1)) / boardRows);
   tileHeight = Math.min(Math.max(tileHeight, 42), 60); 
@@ -179,7 +177,7 @@ function renderGameScreen(ctx, width, height, state, CATEGORY_META) {
   ctx.shadowColor = 'rgba(0, 0, 0, 0.06)';
   ctx.shadowBlur = 10;
   ctx.shadowOffsetY = 3;
-  drawRoundedRect(ctx, panelX, panelY, panelWidth, panelHeight, 16, 'rgba(255, 255, 255, 0.94)', 'rgba(255, 183, 77, 0.4)', 1.8);
+  drawRoundedRect(ctx, panelX, panelY, panelWidth, panelHeight, 16, 'rgba(255, 255, 255, 0.92)', 'rgba(197, 225, 165, 0.6)', 1.8);
   ctx.restore();
 
   // 卡片矩阵
@@ -206,16 +204,16 @@ function renderGameScreen(ctx, width, height, state, CATEGORY_META) {
     const selected = state.selected.includes(index);
 
     let cardGrad = ctx.createLinearGradient(x, y, x, y + tileHeight);
-    let borderColor = '#ffe0b2';
-    let textColor = '#4e342e';
+    let borderColor = '#c5e1a5';
+    let textColor = '#2d3748';
 
     if (tile.kind === 'cn') {
       cardGrad.addColorStop(0, '#ffffff');
-      cardGrad.addColorStop(1, '#fff8e1');
+      cardGrad.addColorStop(1, '#f1f8e9');
     } else {
-      cardGrad.addColorStop(0, '#fffde7');
-      cardGrad.addColorStop(1, '#fff59d');
-      borderColor = '#ffe082';
+      cardGrad.addColorStop(0, '#f9fbe7');
+      cardGrad.addColorStop(1, '#e8f5e9');
+      borderColor = '#c5e1a5';
     }
 
     if (selected) {
@@ -226,16 +224,16 @@ function renderGameScreen(ctx, width, height, state, CATEGORY_META) {
         borderColor = '#d50000';
         textColor = '#ffffff';
       } else {
-        cardGrad.addColorStop(0, '#ffe082');
-        cardGrad.addColorStop(1, '#ffb300');
-        borderColor = '#f57c00';
+        cardGrad.addColorStop(0, '#c5e1a5');
+        cardGrad.addColorStop(1, '#9ccc65');
+        borderColor = '#558b2f';
         textColor = '#ffffff';
       }
     }
 
     ctx.save();
     if (selected) {
-      ctx.shadowColor = isShaking ? 'rgba(255, 82, 82, 0.5)' : 'rgba(255, 152, 0, 0.5)';
+      ctx.shadowColor = isShaking ? 'rgba(255, 82, 82, 0.5)' : 'rgba(156, 204, 101, 0.5)';
       ctx.shadowBlur = 8;
     } else {
       ctx.shadowColor = 'rgba(0, 0, 0, 0.03)';
@@ -258,22 +256,7 @@ function renderGameScreen(ctx, width, height, state, CATEGORY_META) {
     updateAndDrawParticles(ctx, state);
   }
 
-  // 6. 底部工具栏
-  const menuY = height - bottomBarHeight + 6;
-  const btnW = (width - 40) / 2;
-  const btnH = 40;
-
-  const hintX = 14;
-  drawRoundedRect(ctx, hintX, menuY, btnW, btnH, 20, '#ffffff', '#ffb74d', 1.5);
-  drawText(ctx, '💡 提示 (看广告)', hintX + btnW / 2, menuY + btnH / 2, 12, '#e65100', 'center', true);
-  state.buttonBounds.hint = { x: hintX, y: menuY, width: btnW, height: btnH };
-
-  const refreshX = width - 14 - btnW;
-  drawRoundedRect(ctx, refreshX, menuY, btnW, btnH, 20, '#ffffff', '#ffb74d', 1.5);
-  drawText(ctx, '🔄 刷新 (看广告)', refreshX + btnW / 2, menuY + btnH / 2, 12, '#e65100', 'center', true);
-  state.buttonBounds.refresh = { x: refreshX, y: menuY, width: btnW, height: btnH };
-
-  // 7. 结算弹窗（失败结算 OR 通关结算）
+  // 7. 结算弹窗
   if (state.isGameOver) {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
     ctx.fillRect(0, 0, width, height);
@@ -287,18 +270,18 @@ function renderGameScreen(ctx, width, height, state, CATEGORY_META) {
     ctx.shadowColor = 'rgba(0, 0, 0, 0.25)';
     ctx.shadowBlur = 16;
     ctx.shadowOffsetY = 6;
-    drawRoundedRect(ctx, dialogX, dialogY, dialogW, dialogH, 18, '#ffffff', '#ffab91', 2);
+    drawRoundedRect(ctx, dialogX, dialogY, dialogW, dialogH, 18, '#ffffff', '#c5e1a5', 2);
     ctx.restore();
 
     drawText(ctx, '⌛ 时间耗尽', width / 2, dialogY + 34, 20, '#d84315', 'center', true);
-    drawText(ctx, '倒计时已归零，别灰心！', width / 2, dialogY + 64, 12, '#8d6e63', 'center', false);
-    drawText(ctx, `本局得分: ${state.score} 分`, width / 2, dialogY + 92, 16, '#e65100', 'center', true);
+    drawText(ctx, '倒计时已归零，别灰心！', width / 2, dialogY + 64, 12, '#558b2f', 'center', false);
+    drawText(ctx, `本局得分: ${state.score} 分`, width / 2, dialogY + 92, 16, '#2e7d32', 'center', true);
 
     const retryBtnW = 130;
     const retryBtnH = 38;
     const retryBtnX = (width - retryBtnW) / 2;
     const retryBtnY = dialogY + 120;
-    drawRoundedRect(ctx, retryBtnX, retryBtnY, retryBtnW, retryBtnH, 19, '#ff9800', '#f57c00', 1);
+    drawRoundedRect(ctx, retryBtnX, retryBtnY, retryBtnW, retryBtnH, 19, '#9ccc65', '#558b2f', 1);
     drawText(ctx, '再试一次 ↺', width / 2, retryBtnY + retryBtnH / 2 + 1, 14, '#ffffff', 'center', true);
 
     state.buttonBounds.next = { x: retryBtnX, y: retryBtnY, width: retryBtnW, height: retryBtnH };
@@ -306,7 +289,6 @@ function renderGameScreen(ctx, width, height, state, CATEGORY_META) {
   } else {
     const isAllMatched = state.board.length > 0 && state.board.every((tile) => tile.matched);
     if (isAllMatched) {
-      // 半透明背景遮罩
       ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
       ctx.fillRect(0, 0, width, height);
 
@@ -326,9 +308,8 @@ function renderGameScreen(ctx, width, height, state, CATEGORY_META) {
       const titleText = isAllClear ? '🏆 恭喜全部通关！' : '🎉 本关通关！';
       drawText(ctx, titleText, width / 2, winCardY + 36, 20, '#2e7d32', 'center', true);
 
-      // 重点展示玩家本关通关时还剩几秒与得分
       drawText(ctx, `⏱️ 剩余时间: ${state.timeLeft} 秒`, width / 2, winCardY + 70, 15, '#2e7d32', 'center', true);
-      drawText(ctx, `本关得分: ${state.score} 分`, width / 2, winCardY + 96, 14, '#e65100', 'center', true);
+      drawText(ctx, `本关得分: ${state.score} 分`, width / 2, winCardY + 96, 14, '#558b2f', 'center', true);
 
       const nextBtnWidth = 150;
       const nextBtnHeight = 42;
@@ -337,7 +318,7 @@ function renderGameScreen(ctx, width, height, state, CATEGORY_META) {
 
       const btnText = isAllClear ? '重头再战 ↺' : '进入下一关 ➔';
       const nextGrad = ctx.createLinearGradient(nextBtnX, nextBtnY, nextBtnX, nextBtnY + nextBtnHeight);
-      nextGrad.addColorStop(0, '#66bb6a');
+      nextGrad.addColorStop(0, '#81c784');
       nextGrad.addColorStop(1, '#43a047');
 
       drawRoundedRect(ctx, nextBtnX, nextBtnY, nextBtnWidth, nextBtnHeight, 21, nextGrad, '#2e7d32', 1.5);

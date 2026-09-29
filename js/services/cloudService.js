@@ -92,13 +92,9 @@ function isCloudAvailable() {
   return Boolean(getCloudInstance());
 }
 
-async function loginToCloudUser() {
-  if (!ensureCloudReady()) {
-    console.log('[cloud debug] 未配置有效 CloudBase 环境，使用游客模式', getCloudDebugInfo());
-    return null;
-  }
-
-  const cloud = getCloudInstance();
+async function loginToCloudUser(cloudInstance = null) {
+  const cloud = cloudInstance || getCloudInstance();
+  
   if (!cloud) {
     console.log('[cloud debug] 未配置有效 CloudBase 环境，使用游客模式', getCloudDebugInfo());
     return null;
@@ -108,6 +104,7 @@ async function loginToCloudUser() {
 
   const storedUser = getStoredUser();
   if (storedUser) {
+    console.log('[cloud debug] 使用缓存用户:', storedUser.username || storedUser.nickName);
     return storedUser;
   }
 
@@ -119,7 +116,8 @@ async function loginToCloudUser() {
         fail: reject,
       });
     });
-    console.log('[cloud debug] 登录成功', loginRes);
+    console.log('[cloud debug] wx.login 成功');
+    
     const cloudResult = await cloud.callFunction({
       name: 'ge',
       data: {
@@ -133,6 +131,17 @@ async function loginToCloudUser() {
     const user = (cloudResult && cloudResult.result && cloudResult.result.user) || cloudResult.result || null;
     if (user) {
       saveStoredUser(user);
+      
+      // 保存用户的最高通关记录到本地
+      if (user.maxPassedLevel && typeof user.maxPassedLevel === 'object') {
+        try {
+          wx.setStorageSync('ge_user_max_level', user.maxPassedLevel);
+          console.log('[cloud debug] 已保存用户最高通关记录:', user.maxPassedLevel);
+        } catch (err) {
+          console.warn('[cloud debug] 保存最高通关记录失败:', err);
+        }
+      }
+      
       return user;
     }
 
@@ -283,6 +292,152 @@ function getCurrentUserName() {
   return '微信用户';
 }
 
+// 获取用户的最高通关关卡
+function getUserMaxPassedLevel(dictName) {
+  try {
+    if (typeof wx !== 'undefined' && wx.getStorageSync) {
+      const maxLevel = wx.getStorageSync('ge_user_max_level');
+      if (maxLevel && typeof maxLevel === 'object' && dictName) {
+        return maxLevel[dictName] || 0;
+      }
+    }
+  } catch (err) {
+    console.warn('[关卡记录] 读取最高通关记录失败:', err);
+  }
+  return 0;
+}
+
+// 记录错题到云端
+async function recordMistakeToCloud(dictName, wordEn, wordCn, level = 1) {
+  let user = getStoredUser();
+  if (!user) {
+    user = await loginToCloudUser();
+  }
+
+  const userId = user ? (user._id || user.openid || '') : 'guest';
+  const openid = user ? (user.openid || '') : '';
+  const cleanDictName = (dictName || 'PEP_SL_XiaoXue5_1_t').replace('.json', '');
+  const mistakeTime = new Date().toISOString();
+
+  console.log('[错题本] 准备记录错题:', {
+    userId,
+    dict: cleanDictName,
+    wordEn,
+    wordCn,
+    level,
+    mistakeTime,
+  });
+
+  // 本地缓存错题（用于快速查询）
+  try {
+    if (typeof wx !== 'undefined' && wx.getStorageSync) {
+      const mistakeKey = `ge_mistake_${cleanDictName}`;
+      let mistakes = wx.getStorageSync(mistakeKey) || {};
+      if (!mistakes[wordEn]) {
+        mistakes[wordEn] = {
+          wordCn,
+          mistakeCount: 0,
+          correctCount: 0,
+          firstMistakeTime: mistakeTime,
+        };
+      }
+      mistakes[wordEn].mistakeCount = (mistakes[wordEn].mistakeCount || 0) + 1;
+      mistakes[wordEn].lastMistakeTime = mistakeTime;
+      wx.setStorageSync(mistakeKey, mistakes);
+    }
+  } catch (err) {
+    console.warn('[错题本] 本地缓存失败:', err);
+  }
+
+  // 同步到云端
+  try {
+    const cloudRes = await callCloudRouter('recordMistake', {
+      userId,
+      openid,
+      dict: cleanDictName,
+      wordEn,
+      wordCn,
+      level,
+      mistakeTime,
+    });
+
+    if (cloudRes && cloudRes.result && cloudRes.result.success) {
+      console.log('[错题本] 云端记录成功:', cloudRes.result);
+      return cloudRes.result;
+    }
+  } catch (err) {
+    console.warn('[错题本] 云端记录失败:', err);
+  }
+
+  return null;
+}
+
+// 更新错题的正确回答次数
+async function updateMistakeCorrectToCloud(dictName, wordEn) {
+  let user = getStoredUser();
+  if (!user) {
+    user = await loginToCloudUser();
+  }
+
+  const userId = user ? (user._id || user.openid || '') : 'guest';
+  const openid = user ? (user.openid || '') : '';
+  const cleanDictName = (dictName || 'PEP_SL_XiaoXue5_1_t').replace('.json', '');
+
+  console.log('[错题本] 准备更新正确次数:', {
+    userId,
+    dict: cleanDictName,
+    wordEn,
+  });
+
+  // 更新本地缓存
+  try {
+    if (typeof wx !== 'undefined' && wx.getStorageSync) {
+      const mistakeKey = `ge_mistake_${cleanDictName}`;
+      let mistakes = wx.getStorageSync(mistakeKey) || {};
+      if (mistakes[wordEn]) {
+        mistakes[wordEn].correctCount = (mistakes[wordEn].correctCount || 0) + 1;
+        mistakes[wordEn].lastCorrectTime = new Date().toISOString();
+        wx.setStorageSync(mistakeKey, mistakes);
+      }
+    }
+  } catch (err) {
+    console.warn('[错题本] 本地更新失败:', err);
+  }
+
+  // 同步到云端
+  try {
+    const cloudRes = await callCloudRouter('updateMistakeCorrect', {
+      userId,
+      openid,
+      dict: cleanDictName,
+      wordEn,
+    });
+
+    if (cloudRes && cloudRes.result && cloudRes.result.success) {
+      console.log('[错题本] 云端更新成功:', cloudRes.result);
+      return cloudRes.result;
+    }
+  } catch (err) {
+    console.warn('[错题本] 云端更新失败:', err);
+  }
+
+  return null;
+}
+
+// 获取本地错题本
+function getLocalMistakes(dictName) {
+  try {
+    if (typeof wx !== 'undefined' && wx.getStorageSync) {
+      const cleanDictName = (dictName || 'PEP_SL_XiaoXue5_1_t').replace('.json', '');
+      const mistakeKey = `ge_mistake_${cleanDictName}`;
+      return wx.getStorageSync(mistakeKey) || {};
+    }
+  } catch (err) {
+    console.warn('[错题本] 读取本地错题失败:', err);
+  }
+  return {};
+}
+
 module.exports = {
   getStoredUser,
   saveStoredUser,
@@ -291,4 +446,8 @@ module.exports = {
   saveLevelProgressToCloud,
   saveLevelRecordToCloud,
   getCurrentUserName,
+  getUserMaxPassedLevel,
+  recordMistakeToCloud,
+  updateMistakeCorrectToCloud,
+  getLocalMistakes,
 };
